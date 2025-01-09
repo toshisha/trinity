@@ -236,11 +236,6 @@ export default function MusicPlayer() {
             </div>
 
             {filteredTracks.length === 0 ? (
-              <div className="textI understand. I'll continue the text stream from the cut-off point, maintaining coherence and consistency with the previous content. Here's the continuation:
-
-div>
-
-            {filteredTracks.length === 0 ? (
               <div className="text-center py-8 opacity-60">
                 {searchQuery ? (
                   <p className="text-sm">No matching songs found</p>
