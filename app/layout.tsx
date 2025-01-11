@@ -1,5 +1,4 @@
 import './globals.css'
-import { inter } from './fonts'
 
 export default function RootLayout({
   children,
@@ -7,8 +6,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.className}>
-      <body>{children}</body>
+    <html lang="en">
+      <body style={{ fontFamily: 'Helvetica, sans-serif' }}>{children}</body>
     </html>
   )
 }

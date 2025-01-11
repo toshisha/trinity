@@ -27,9 +27,3 @@ body {
   border: transparent;
 }
 
-@layer base {
-  .font-custom {
-    font-family: var(--font-custom);
-  }
-}
-
