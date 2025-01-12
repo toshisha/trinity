@@ -170,7 +170,7 @@ export default function MusicPlayer() {
           <Image
             src="/logo.svg"
             alt="MAFWBH logo"
-            width={120}
+            width={154}
             height={40}
             priority
           />
