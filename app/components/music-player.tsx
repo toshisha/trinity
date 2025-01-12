@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Shuffle, SkipBack, Play, Pause, SkipForward, Volume2, Repeat } from 'lucide-react'
+import { Search, Shuffle, SkipBack, Play, Pause, SkipForward, Repeat } from 'lucide-react'
 import Image from 'next/image'
+import { AnimatedVolumeControl } from './animated-volume-control'
 
 interface Track {
   id: number
@@ -10,7 +11,6 @@ interface Track {
   artist: string
   duration: number
   url: string
-  coverArt: string | null
 }
 
 export default function MusicPlayer() {
@@ -27,8 +27,20 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     fetch('/api/tracks')
-      .then(res => res.json())
-      .then(data => setTracks(data))
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`)
+        }
+        return res.json()
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setTracks(data)
+        } else {
+          console.error('Invalid data format received')
+          setTracks([])
+        }
+      })
       .catch(error => {
         console.error('Error fetching tracks:', error)
         setTracks([])
@@ -138,8 +150,7 @@ export default function MusicPlayer() {
     setCurrentTime(newTime)
   }, [currentTrack])
 
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value)
+  const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume)
   }, [])
 
@@ -176,7 +187,7 @@ export default function MusicPlayer() {
         </div>
       </header>
 
-      <div className="flex-1 p-4 overflow-hidden">
+      <div className="flex-1 p-4 overflow-hidden pb-36">
         <div className="border border-white/10 rounded-md h-full flex flex-col">
           <div className="grid grid-cols-[48px_1fr_1fr_80px] gap-3 text-sm opacity-60 px-4 py-2 border-b border-white/10">
             <div className="text-center">#</div>
@@ -190,7 +201,7 @@ export default function MusicPlayer() {
               <p className="text-sm">No songs found</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto custom-scrollbar pb-20">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               {filteredTracks.map((track, index) => (
                 <button
                   key={track.id}
@@ -212,21 +223,23 @@ export default function MusicPlayer() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-black p-4">
+      <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-black/95 backdrop-blur supports-[backdrop-filter]:bg-black/60 p-4">
         <div className="max-w-3xl mx-auto flex flex-col items-center gap-2">
-          <div className="w-full flex justify-between text-xs opacity-60 px-2">
-            <span>{formatTime(currentTime)}</span>
-            <span>{currentTrack ? formatTime(currentTrack.duration) : '0:00'}</span>
-          </div>
-          <div 
-            ref={progressRef}
-            onClick={handleProgressClick}
-            className="w-full bg-white/10 h-1 rounded-full overflow-hidden cursor-pointer relative"
-          >
+          <div className="w-full flex flex-col gap-1">
+            <div className="w-full flex justify-between text-[10px] text-white/60">
+              <span>{formatTime(currentTime)}</span>
+              <span>{currentTrack ? formatTime(currentTrack.duration) : '0:00'}</span>
+            </div>
             <div 
-              className="bg-white h-full transition-all duration-300 ease-linear" 
-              style={{ width: `${((currentTime / (currentTrack?.duration || 1)) * 100).toFixed(2)}%` }}
-            />
+              ref={progressRef}
+              onClick={handleProgressClick}
+              className="w-full bg-white/10 h-[2px] rounded-full overflow-hidden cursor-pointer relative"
+            >
+              <div 
+                className="bg-white h-full transition-all duration-100 ease-linear" 
+                style={{ width: `${((currentTime / (currentTrack?.duration || 1)) * 100).toFixed(2)}%` }}
+              />
+            </div>
           </div>
 
           <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -276,17 +289,8 @@ export default function MusicPlayer() {
               </button>
             </div>
 
-            <div className="w-full sm:w-1/3 flex items-center justify-center sm:justify-end gap-2">
-              <Volume2 className="w-5 h-5 opacity-60" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={volume}
-                onChange={handleVolumeChange}
-                className="w-24 accent-white"
-              />
+            <div className="w-full sm:w-1/3 flex items-center justify-center sm:justify-end">
+              <AnimatedVolumeControl volume={volume} onVolumeChange={handleVolumeChange} />
             </div>
           </div>
         </div>
@@ -301,22 +305,4 @@ export default function MusicPlayer() {
     </div>
   )
 }
-
-const scrollbarCSS = `
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-radius: 20px;
-    border: transparent;
-  }
-`
-
-const ScrollbarStyle = () => (
-  <style jsx global>{scrollbarCSS}</style>
-)
 

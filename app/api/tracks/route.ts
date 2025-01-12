@@ -1,28 +1,37 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { NextResponse } from 'next/server'
+import { getAudioDurationInSeconds } from 'get-audio-duration'
 
-async function getBasicMetadata(filePath: string) {
+async function getAudioMetadata(filePath: string, fileName: string) {
   try {
-    const stats = await stat(filePath)
-    const fileName = filePath.split('/').pop() || ''
+    // Get duration using get-audio-duration
+    const duration = await getAudioDurationInSeconds(filePath)
+    
+    // Parse filename for metadata
+    // Expected format: "Artist Name - Song Title.mp3"
     const nameWithoutExt = fileName.replace(/\.(mp3|flac|wav|aac)$/i, '')
     
-    const [artist, title] = nameWithoutExt.includes(' - ') 
-      ? nameWithoutExt.split(' - ')
-      : ['Unknown Artist', nameWithoutExt]
-
-    return {
-      title: title.trim(),
-      artist: artist.trim(),
-      size: stats.size,
-      duration: Math.floor(stats.size / 16000) // rough estimate
+    if (nameWithoutExt.includes(' - ')) {
+      const [artist, title] = nameWithoutExt.split(' - ')
+      return {
+        title: title.trim(),
+        artist: artist.trim(),
+        duration: Math.round(duration)
+      }
+    } else {
+      // If filename doesn't follow the format, use the whole name as title
+      return {
+        title: nameWithoutExt.trim(),
+        artist: 'Unknown Artist',
+        duration: Math.round(duration)
+      }
     }
   } catch (error) {
+    console.error('Error getting audio metadata:', error)
     return {
-      title: 'Unknown',
+      title: fileName,
       artist: 'Unknown Artist',
-      size: 0,
       duration: 0
     }
   }
@@ -30,23 +39,25 @@ async function getBasicMetadata(filePath: string) {
 
 export async function GET() {
   try {
-    // First, ensure the music directory exists
     const musicDir = join(process.cwd(), 'public', 'music')
     
     try {
       await stat(musicDir)
     } catch {
-      // If the directory doesn't exist, return an empty array
       return NextResponse.json([])
     }
 
     const files = await readdir(musicDir)
     const musicFiles = files.filter(file => /\.(mp3|flac|wav|aac)$/i.test(file))
 
+    if (musicFiles.length === 0) {
+      return NextResponse.json([])
+    }
+
     const tracks = await Promise.all(
       musicFiles.map(async (file, index) => {
         const filePath = join(musicDir, file)
-        const metadata = await getBasicMetadata(filePath)
+        const metadata = await getAudioMetadata(filePath, file)
 
         return {
           id: index + 1,
@@ -60,8 +71,8 @@ export async function GET() {
 
     return NextResponse.json(tracks)
   } catch (error) {
-    // Always return a valid JSON response, even in case of errors
-    return NextResponse.json([], { status: 200 })
+    console.error('API Error:', error)
+    return NextResponse.json([])
   }
 }
 
