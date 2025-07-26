@@ -18,7 +18,6 @@ interface Track {
 
 export default function MusicPlayer() {
   const [tracks, setTracks] = useState<Track[]>([])
-  const [originalTracks, setOriginalTracks] = useState<Track[]>([])
   const [error, setError] = useState<string | null>(null)
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -30,14 +29,6 @@ export default function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const progressRef = useRef<HTMLDivElement>(null)
 
-  const [crossfadeDuration, setCrossfadeDuration] = useState(3) // 3 seconds default
-  const [isCrossfadeEnabled, setIsCrossfadeEnabled] = useState(true)
-  const [nextTrack, setNextTrack] = useState<Track | null>(null)
-  const [shuffleQueue, setShuffleQueue] = useState<Track[]>([])
-  const [shuffleIndex, setShuffleIndex] = useState(0)
-  const nextAudioRef = useRef<HTMLAudioElement | null>(null)
-  const crossfadeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
   useEffect(() => {
     const fetchTracks = async () => {
       try {
@@ -46,13 +37,11 @@ export default function MusicPlayer() {
         const data = await res.json()
         if (!Array.isArray(data)) throw new Error("Invalid data format")
         setTracks(data)
-        setOriginalTracks(data)
         setError(null)
       } catch (err) {
         console.error("Error fetching tracks:", err)
         setError("Failed to load tracks. Please try again later.")
         setTracks([])
-        setOriginalTracks([])
       }
     }
 
@@ -99,124 +88,22 @@ export default function MusicPlayer() {
   }, [])
 
   const toggleShuffle = useCallback(() => {
-    setIsShuffled((prev) => {
-      const newShuffled = !prev
+    setIsShuffled((prev) => !prev)
+    setTracks((prev) => (isShuffled ? [...prev].sort((a, b) => a.id - b.id) : shuffleArray(prev)))
+  }, [isShuffled, shuffleArray])
 
-      if (newShuffled) {
-        // Enable shuffle: create shuffled version
-        const shuffled = shuffleArray(originalTracks)
-        setTracks(shuffled)
-        setShuffleQueue(shuffled)
-        setShuffleIndex(0)
-      } else {
-        // Disable shuffle: restore original order
-        setTracks(originalTracks)
-        setShuffleQueue([])
-        setShuffleIndex(0)
-      }
+  const toggleAutoplay = useCallback(() => {
+    setIsAutoplay((prev) => !prev)
+  }, [])
 
-      return newShuffled
-    })
-  }, [shuffleArray, originalTracks])
-
-  const getNextTrack = useCallback(
-    (current: Track | null = currentTrack): Track | null => {
-      if (!current || tracks.length === 0) return null
-
-      if (isShuffled && shuffleQueue.length > 0) {
-        const nextIndex = (shuffleIndex + 1) % shuffleQueue.length
-        return shuffleQueue[nextIndex] || null
-      } else {
-        const currentIndex = tracks.findIndex((track) => track.id === current.id)
-        const nextIndex = (currentIndex + 1) % tracks.length
-        return tracks[nextIndex] || null
-      }
-    },
-    [currentTrack, tracks, isShuffled, shuffleQueue, shuffleIndex],
-  )
-
-  const preloadNextTrack = useCallback(() => {
-    const next = getNextTrack()
-    setNextTrack(next)
-
-    if (next && nextAudioRef.current) {
-      nextAudioRef.current.src = next.url
-      nextAudioRef.current.load()
+  const playTrack = useCallback((track: Track) => {
+    setCurrentTrack(track)
+    setIsPlaying(true)
+    if (audioRef.current) {
+      audioRef.current.src = track.url
+      audioRef.current.play()
     }
-  }, [getNextTrack])
-
-  const playTrack = useCallback(
-    (track: Track, skipCrossfade = false) => {
-      // Clear any existing crossfade timeout
-      if (crossfadeTimeoutRef.current) {
-        clearTimeout(crossfadeTimeoutRef.current)
-      }
-
-      setCurrentTrack(track)
-      setIsPlaying(true)
-
-      if (audioRef.current) {
-        if (!skipCrossfade && isCrossfadeEnabled && currentTrack && audioRef.current.src) {
-          // Start crossfade transition
-          const currentAudio = audioRef.current
-          const nextAudio = nextAudioRef.current
-
-          if (nextAudio && nextAudio.src === track.url) {
-            // Use preloaded track
-            nextAudio.volume = 0
-            nextAudio.currentTime = 0
-            nextAudio.play()
-
-            // Crossfade
-            const fadeSteps = 20
-            const fadeInterval = (crossfadeDuration * 1000) / fadeSteps
-            let step = 0
-
-            const fadeInterval_id = setInterval(() => {
-              step++
-              const progress = step / fadeSteps
-
-              currentAudio.volume = volume * (1 - progress)
-              nextAudio.volume = volume * progress
-
-              if (step >= fadeSteps) {
-                clearInterval(fadeInterval_id)
-                currentAudio.pause()
-                currentAudio.volume = volume
-
-                // Swap audio references
-                const tempRef = audioRef.current
-                audioRef.current = nextAudioRef.current
-                nextAudioRef.current = tempRef
-              }
-            }, fadeInterval)
-          } else {
-            // Fallback to normal play
-            audioRef.current.src = track.url
-            audioRef.current.volume = volume
-            audioRef.current.play()
-          }
-        } else {
-          // Normal play without crossfade
-          audioRef.current.src = track.url
-          audioRef.current.volume = volume
-          audioRef.current.play()
-        }
-      }
-
-      // Update shuffle index if in shuffle mode
-      if (isShuffled && shuffleQueue.length > 0) {
-        const trackIndex = shuffleQueue.findIndex((t) => t.id === track.id)
-        if (trackIndex !== -1) {
-          setShuffleIndex(trackIndex)
-        }
-      }
-
-      // Preload next track after a short delay
-      setTimeout(preloadNextTrack, 1000)
-    },
-    [currentTrack, volume, crossfadeDuration, isCrossfadeEnabled, isShuffled, shuffleQueue, preloadNextTrack],
-  )
+  }, [])
 
   const togglePlay = useCallback(() => {
     if (!currentTrack) return
@@ -229,32 +116,28 @@ export default function MusicPlayer() {
   }, [currentTrack, isPlaying])
 
   const playNext = useCallback(() => {
-    const next = getNextTrack()
-    if (next) {
-      playTrack(next)
+    if (!currentTrack || tracks.length === 0) return
+    const currentIndex = tracks.findIndex((track) => track.id === currentTrack.id)
+    let nextIndex
+    if (isShuffled) {
+      nextIndex = Math.floor(Math.random() * tracks.length)
+    } else {
+      nextIndex = (currentIndex + 1) % tracks.length
     }
-  }, [getNextTrack, playTrack])
+    playTrack(tracks[nextIndex])
+  }, [currentTrack, tracks, isShuffled, playTrack])
 
   const playPrevious = useCallback(() => {
     if (!currentTrack || tracks.length === 0) return
-
-    let previousTrack: Track | null = null
-
-    if (isShuffled && shuffleQueue.length > 0) {
-      // In shuffle mode, go to previous in shuffle queue
-      const prevIndex = shuffleIndex - 1 >= 0 ? shuffleIndex - 1 : shuffleQueue.length - 1
-      previousTrack = shuffleQueue[prevIndex]
-      setShuffleIndex(prevIndex)
+    const currentIndex = tracks.findIndex((track) => track.id === currentTrack.id)
+    let previousIndex
+    if (isShuffled) {
+      previousIndex = Math.floor(Math.random() * tracks.length)
     } else {
-      const currentIndex = tracks.findIndex((track) => track.id === currentTrack.id)
-      const previousIndex = (currentIndex - 1 + tracks.length) % tracks.length
-      previousTrack = tracks[previousIndex]
+      previousIndex = (currentIndex - 1 + tracks.length) % tracks.length
     }
-
-    if (previousTrack) {
-      playTrack(previousTrack, true) // Skip crossfade for previous
-    }
-  }, [currentTrack, tracks, isShuffled, shuffleQueue, shuffleIndex, playTrack])
+    playTrack(tracks[previousIndex])
+  }, [currentTrack, tracks, isShuffled, playTrack])
 
   const handleProgressClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -284,78 +167,6 @@ export default function MusicPlayer() {
       setCurrentTime(0)
     }
   }, [isAutoplay, playNext])
-
-  const toggleAutoplay = useCallback(() => {
-    setIsAutoplay((prev) => !prev)
-  }, [])
-
-  // Setup crossfade trigger
-  useEffect(() => {
-    if (!audioRef.current || !currentTrack || !isCrossfadeEnabled) return
-
-    const audio = audioRef.current
-    const handleTimeUpdate = () => {
-      const timeLeft = audio.duration - audio.currentTime
-
-      if (timeLeft <= crossfadeDuration && timeLeft > crossfadeDuration - 0.1 && isAutoplay) {
-        // Start crossfade
-        const next = getNextTrack()
-        if (next && nextAudioRef.current && !crossfadeTimeoutRef.current) {
-          crossfadeTimeoutRef.current = setTimeout(() => {
-            if (nextAudioRef.current && next) {
-              nextAudioRef.current.src = next.url
-              nextAudioRef.current.volume = 0
-              nextAudioRef.current.currentTime = 0
-              nextAudioRef.current.play()
-
-              // Start fade
-              const fadeSteps = 20
-              const fadeInterval = (crossfadeDuration * 1000) / fadeSteps
-              let step = 0
-
-              const fadeInterval_id = setInterval(() => {
-                step++
-                const progress = step / fadeSteps
-
-                if (audioRef.current) audioRef.current.volume = volume * (1 - progress)
-                if (nextAudioRef.current) nextAudioRef.current.volume = volume * progress
-
-                if (step >= fadeSteps) {
-                  clearInterval(fadeInterval_id)
-                  // The track will end naturally and trigger handleTrackEnd
-                }
-              }, fadeInterval)
-            }
-          }, 100)
-        }
-      }
-    }
-
-    audio.addEventListener("timeupdate", handleTimeUpdate)
-    return () => {
-      audio.removeEventListener("timeupdate", handleTimeUpdate)
-      if (crossfadeTimeoutRef.current) {
-        clearTimeout(crossfadeTimeoutRef.current)
-        crossfadeTimeoutRef.current = null
-      }
-    }
-  }, [currentTrack, crossfadeDuration, isCrossfadeEnabled, isAutoplay, volume, getNextTrack])
-
-  // Minimalist crossfade icon component
-  const CrossfadeIcon = ({ className }: { className?: string }) => (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M3 12h6l3-9 3 9h6" />
-      <path d="M21 12h-6l-3 9-3-9H3" opacity="0.5" />
-    </svg>
-  )
 
   return (
     <div className="flex flex-col h-screen bg-black text-white">
@@ -435,7 +246,7 @@ export default function MusicPlayer() {
             <div
               ref={progressRef}
               onClick={handleProgressClick}
-              className="w-full bg-white/10 h-[2px] rounded-full overflow-hidden cursor-pointer relative"
+              className="w-full bg-white/10 h-1 rounded-full overflow-hidden cursor-pointer relative"
             >
               <div
                 className="bg-white h-full transition-all duration-100 ease-linear"
@@ -445,12 +256,29 @@ export default function MusicPlayer() {
           </div>
 
           <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2">
-            <div className="w-full sm:w-1/3 flex items-center justify-center sm:justify-start">
+            <div className="w-full sm:w-1/3 flex items-center justify-center sm:justify-start gap-3">
               {currentTrack && (
-                <div className="truncate text-center sm:text-left">
-                  <div className="font-medium truncate">{currentTrack.title}</div>
-                  <div className="text-sm opacity-60 truncate">{currentTrack.artist}</div>
-                </div>
+                <>
+                  <div className="flex-shrink-0">
+                    {currentTrack.coverArt ? (
+                      <Image
+                        src={currentTrack.coverArt || "/placeholder.svg"}
+                        alt={`Cover for ${currentTrack.title}`}
+                        width={48}
+                        height={48}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-white/10 rounded-md flex items-center justify-center">
+                        <Music className="w-6 h-6 text-white/60" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="truncate text-center sm:text-left min-w-0">
+                    <div className="font-medium truncate">{currentTrack.title}</div>
+                    <div className="text-sm opacity-60 truncate">{currentTrack.artist}</div>
+                  </div>
+                </>
               )}
             </div>
 
@@ -458,7 +286,6 @@ export default function MusicPlayer() {
               <button
                 onClick={toggleShuffle}
                 className={`p-2 transition-opacity ${isShuffled ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
-                title={`Shuffle ${isShuffled ? "enabled" : "disabled"}`}
               >
                 <Shuffle className="w-5 h-5" />
               </button>
@@ -474,16 +301,8 @@ export default function MusicPlayer() {
               <button
                 onClick={toggleAutoplay}
                 className={`p-2 transition-opacity ${isAutoplay ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
-                title={`Autoplay ${isAutoplay ? "enabled" : "disabled"}`}
               >
                 <Repeat className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setIsCrossfadeEnabled((prev) => !prev)}
-                className={`p-2 transition-opacity ${isCrossfadeEnabled ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
-                title={`Crossfade ${isCrossfadeEnabled ? "enabled" : "disabled"}`}
-              >
-                <CrossfadeIcon className="w-5 h-5" />
               </button>
             </div>
 
@@ -500,7 +319,6 @@ export default function MusicPlayer() {
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
       />
-      <audio ref={nextAudioRef} preload="none" />
     </div>
   )
 }
