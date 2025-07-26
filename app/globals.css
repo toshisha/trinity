@@ -7,6 +7,11 @@ body {
   color: white;
 }
 
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
 /* Custom scrollbar styles */
 * {
   scrollbar-width: thin;
@@ -27,3 +32,16 @@ body {
   border: transparent;
 }
 
+/* Smooth scrolling for custom scrollable areas */
+.custom-scrollbar {
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  .font-custom {
+    font-family: var(--font-custom);
+  }
+  * {
+    font-family: inherit;
+  }
+}

@@ -1,12 +1,13 @@
-import './globals.css'
-import { inter } from './fonts'
-import { Metadata } from 'next'
+import type React from "react"
+import "./globals.css"
+import { primaryFont } from "./fonts"
+import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: 'trinity by mafwbh',
-  description: '1st part of the trinity playlist',
+  title: "MAFWBH Music Player",
+  description: "A custom music player for your favorite tunes",
   icons: {
-    icon: '/icon.png',
+    icon: "/icon.png",
   },
 }
 
@@ -16,9 +17,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.className}>
+    <html lang="en" className={primaryFont.className}>
       <body>{children}</body>
     </html>
   )
 }
-
